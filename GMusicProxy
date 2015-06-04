@@ -193,7 +193,7 @@ class GetHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             os.unlink(tempFile.name)
             self.wfile.write(tagsBin)
 
-        url = self._robust_retry(lambda:api.get_stream_url(song_id=id, device_id=config['device_id']))
+        url = self._robust_retry(lambda:api.get_stream_url(song_id=id))
         logger.debug('streaming url: %s', url)
 
         mp3 = opener.open(url)
@@ -480,11 +480,9 @@ def getOptions(filename):
     parser.add_argument('-c', '--config', type=file, help='specific configuration file to use')
     parser.add_argument('-e', '--email', help='email address of the Google account [required]')
     parser.add_argument('-p', '--password', help='password of the Google account (or an application-specific one if two-factor authentication is enabled) [required]')
-    parser.add_argument('-d', '--device-id', help='the ID of a registered Android device [required]')
     parser.add_argument('-H', '--host', help='host in the generated URLs [default: autodetected local ip address]')
     parser.add_argument('-P', '--port', type=int, help='default TCP port to use [default: 9999]')
     parser.add_argument('-a', '--disable-all-access', default=False, action='store_true', help='disable All Access functionalities')
-    parser.add_argument('-L', '--list-devices', default=False, action='store_true', help='list the registered devices')
     parser.add_argument('-D', '--debug', default=False, action='store_true', help='enable debug messages')
     parser.add_argument('-l', '--log', help='log file')
     parser.add_argument('-f', '--daemon', default=False, action='store_true', help='daemonize the program')
@@ -505,8 +503,6 @@ def getOptions(filename):
     configValues = dict(config.items('dummy'))
 
     # adjust some names in order to make work configparser with argparse
-    if 'device-id' in configValues: configValues['device_id'] = configValues.pop('device-id')
-    if 'list-devices' in configValues: configValues['list_devices'] = configValues.pop('list-devices')
     if 'disable-all-access' in configValues: configValues['disable_all_access'] = configValues.pop('disable-all-access')
     if 'disable-version-check' in configValues: configValues['disable_version_check'] = configValues.pop('disable-version-check')
     if 'extended-m3u' in configValues: configValues['extended_m3u'] = configValues.pop('extended-m3u')
@@ -520,29 +516,11 @@ def getOptions(filename):
     config = vars(args)
     return config
 
-def listDevices(email, password):
-    api = gmusicapi.Webclient(debug_logging=config['debug'])
-    if config['debug']:
-        api.logger = logger
-    api.login(email, password)
-    if not api.is_authenticated():
-       logger.error('Sorry, those credentials weren\'t accepted.')
-       sys.exit(1)
-    devices = api.get_registered_devices()
-    api.logout()
-    if len(devices)==0:
-        logger.warning('No Android phone-like devices registered in your Google account.')
-    else:
-        for d in devices:
-            if d['type'] == 'PHONE':
-                logger.info('- %s (%s - %s) --> device-id=%s', d['name'], d['manufacturer'], d['model'], d['id'].replace('0x',''))
-        sys.exit()
-
 def loginGM(email, password):
     api = gmusicapi.Mobileclient(debug_logging=config['debug'])
     if config['debug']:
         api.logger = logger
-    api.login(email, password, config['device_id'])
+    api.login(email, password)
     if not api.is_authenticated():
        logger.error('Sorry, those credentials weren\'t accepted.')
        sys.exit(1)
@@ -624,13 +602,6 @@ if __name__ == '__main__':
 
     if config['email'] is None or config['password'] is None or len(config['email']) == 0 or len(config['password']) == 0:
         logger.error('Please, specify the credentials of your Google account in the config file or on the command-line.')
-        sys.exit(1)
-
-    if config['list_devices']:
-        listDevices(config['email'], config['password'])
-
-    if config['device_id'] is None or len(config['device_id']) == 0:
-        logger.error('Please, specify the ID of an Android device registered in your Google account in the config file or on the command-line. Use the option \'--list-devices=true\' to auto-discover the IDs.')
         sys.exit(1)
 
     api = loginGM(config['email'], config['password'])
